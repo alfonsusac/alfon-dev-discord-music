@@ -1,11 +1,12 @@
-
 if (!process.env.WEBHOOK_URL) {
   console.error('WEBHOOK_URL env required! Not found in .env')
   process.exit(0)
 }
 
+const package_json = await import('../package.json')
+
 export async function post_discord(msg: string) {
-  await fetch(`${ process.env.WEBHOOK_URL }`, {
+  const res = await fetch(`${ process.env.WEBHOOK_URL }`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -14,4 +15,8 @@ export async function post_discord(msg: string) {
       content: msg,
     }),
   })
+  try {
+    console.log(await res.json())
+  } catch (error) {
+  }
 }

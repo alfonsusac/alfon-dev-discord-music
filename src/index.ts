@@ -1,10 +1,6 @@
 import { post_discord } from "./discord-log"
 
-await post_discord("Starting appliation...")
-
-
-process.env.NODE_ENV === ""
-
+await post_discord(`-# bun ${Bun.argv.slice(1).join(' ')}\nStarting application...`)
 
 
 

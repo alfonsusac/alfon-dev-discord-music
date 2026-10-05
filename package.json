@@ -1,7 +1,8 @@
 {
   "scripts": {
     "dev": "IS_DEV=1 bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "pull": "git pull"
   },
   "name": "alfon-dev-discord-music",
   "module": "index.ts",
@@ -12,5 +13,11 @@
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "dependencies": {
+    "@discordjs/core": "^2.6.0",
+    "@discordjs/rest": "^2.6.3",
+    "@discordjs/voice": "^0.19.2",
+    "@discordjs/ws": "^2.0.4"
   }
 }

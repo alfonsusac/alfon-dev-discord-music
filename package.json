@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "dev": "bun --watch src/index.ts"
+  },
+  "name": "alfon-dev-discord-music",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  }
+}

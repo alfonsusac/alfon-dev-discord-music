@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "bun --watch src/index.ts"
+    "dev": "IS_DEV=1 bun --watch src/index.ts",
+    "start": "bun src/index.ts"
   },
   "name": "alfon-dev-discord-music",
   "module": "index.ts",

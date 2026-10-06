@@ -80,21 +80,26 @@ if (await music_file.exists() === false) {
 
 const music_file_ogg = Bun.file('./public/muffled.ogg')
 if (await music_file_ogg.exists() === false) {
-  const transcoder = new prism.FFmpeg({
-    args: [
-      "-i", "./public/muffled.mp3",
-      "-f", "ogg",
-      "-c:a", "libopus",
-      "-b:a", "128k",
-      "-ar", "48000",
-      "-ac", "2"
-    ],
-  })
-  await pipeline(
-    createReadStream("./public/muffled.mp3"),
-    transcoder,
-    createWriteStream("./public/muffled.ogg"),
-  )
+  try {
+    const transcoder = new prism.FFmpeg({
+      args: [
+        "-i", "./public/muffled.mp3",
+        "-f", "ogg",
+        "-c:a", "libopus",
+        "-b:a", "128k",
+        "-ar", "48000",
+        "-ac", "2"
+      ],
+    })
+    await pipeline(
+      createReadStream("./public/muffled.mp3"),
+      transcoder,
+      createWriteStream("./public/muffled.ogg"),
+    )
+  } catch (error) {
+    await post_error(`Error transcoding .mp3 to .ogg!: ${error}`)
+    throw error
+  }
 }
 
 if (await music_file_ogg.exists() === false) {
@@ -348,7 +353,6 @@ function create_djs_adapter(): DiscordGatewayAdapterCreator {
 
 export async function connect_to_channel_and_subscribe() {
   const channel_id = await read_channel_id()
-  // if (!channel_id || !guild_id) throw new Error("channel id or guild id not defined!")
   if (!channel_id || !guild_id) return
 
   if (!connection) {

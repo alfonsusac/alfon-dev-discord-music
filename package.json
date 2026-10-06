@@ -1,8 +1,10 @@
 {
   "scripts": {
     "dev": "IS_DEV=1 bun --watch src/index.ts",
+    "dev-start": "IS_DEV=1 bun src/index.ts",
     "start": "bun src/index.ts",
-    "pull": "git pull"
+    "pull": "git pull",
+    "typecheck": "tsc --noEmit"
   },
   "name": "alfon-dev-discord-music",
   "module": "index.ts",
@@ -18,6 +20,7 @@
     "@discordjs/core": "^2.6.0",
     "@discordjs/rest": "^2.6.3",
     "@discordjs/voice": "^0.19.2",
-    "@discordjs/ws": "^2.0.4"
+    "@discordjs/ws": "^2.0.4",
+    "prism-media": "^1.3.5"
   }
 }

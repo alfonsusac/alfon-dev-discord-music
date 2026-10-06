@@ -1,11 +1,14 @@
 import { REST } from "@discordjs/rest"
 import { WebSocketManager, WebSocketShardEvents } from "@discordjs/ws"
 import { post_error, post_log } from "./discord-log"
-import { ApplicationCommandOptionType, ApplicationCommandType, ApplicationIntegrationType, ChannelType, Client, GatewayDispatchEvents, GatewayIntentBits, GatewayOpcodes, InteractionContextType, InteractionType, MessageFlags, PermissionFlagsBits, PresenceUpdateStatus, type API, type APIChatInputApplicationCommandInteractionData, type APIVoiceState, type GatewayReadyDispatchData, type GatewayVoiceServerUpdateDispatchData, type GatewayVoiceStateUpdateDispatchData, type Snowflake } from "@discordjs/core"
+import { ApplicationCommandOptionType, ApplicationCommandType, ChannelType, Client, GatewayDispatchEvents, GatewayIntentBits, InteractionType, PermissionFlagsBits, PresenceUpdateStatus } from "@discordjs/core"
 import { get_boolean_option } from "./get-boolean-option"
 import { get_string_option } from "./get-string-option"
-import { AudioPlayerStatus, createAudioPlayer, createAudioResource, entersState, joinVoiceChannel, VoiceConnectionStatus, type DiscordGatewayAdapterCreator, type DiscordGatewayAdapterLibraryMethods, type VoiceConnection } from "@discordjs/voice"
+import { AudioPlayerStatus, createAudioPlayer, createAudioResource, entersState, joinVoiceChannel, VoiceConnection, VoiceConnectionStatus, type DiscordGatewayAdapterCreator, type DiscordGatewayAdapterLibraryMethods } from "@discordjs/voice"
 import { replier } from "./reply"
+import prism from "prism-media"
+import { createReadStream, createWriteStream } from "node:fs"
+import { pipeline } from "node:stream/promises"
 
 process.on('uncaughtException', async error => {
   console.error(`Uncaught Exception at`)
@@ -14,7 +17,7 @@ process.on('uncaughtException', async error => {
   process.exit(1)
 })
 // process.on('unhandledRejection', async (reason, promise) => {
-//   console.error(`Unhandled Rejection: ${ reason }!`)
+//   console.error(`Unhandled Rej243ection: ${ reason }!`)
 //   promise.catch(async error => {
 //     console.error(`Unhandled Rejection at`)
 //     console.error(error)
@@ -23,11 +26,11 @@ process.on('uncaughtException', async error => {
 // })
 process.on("SIGINT", async () => {
   await post_error("Closing application... (SIGINT)")
-  process.exit(1)
+  process.exit(0)
 })
 process.on("SIGTERM", async () => {
   await post_error("Closing application... (SIGTERM)")
-  process.exit(1)
+  process.exit(0)
 })
 process.on("exit", async () => {
   console.log("exiting...")
@@ -35,10 +38,14 @@ process.on("exit", async () => {
 
 // ### Main
 
+// # Checking Configs
+
 await post_log(`-# bun ${ Bun.argv.slice(1).join(' ') }\nStarting application...`)
 
 const token = process.env.BOT_TOKEN
-if (!token) throw new Error("BOT_TOKEN is required")
+if (!token)
+  throw new Error("BOT_TOKEN is required")
+
 // go to https://discord.com/developers/applications to make a token
 
 const guild_id = process.env.GUILD_ID
@@ -55,10 +62,74 @@ const set_channel_id = async (nv: string) => channel_id_file.write(nv)
 
 const toggle_file = Bun.file('./db/toggle.txt')
 const read_toggle = async () => Boolean(await toggle_file.exists()
-  ? await toggle_file.text()
+  ? (await toggle_file.text()).trim()
   : null)
 const set_toggle = async (nv: boolean) => toggle_file.write(nv ? "1" : "")
 
+// # Preparing Audio Files
+
+// convert music to .ogg
+
+
+
+const player = createAudioPlayer()
+const music_file = Bun.file('./public/muffled.mp3')
+if (await music_file.exists() === false) {
+  throw new Error("Music file at (./public/muffled.mp3) doesnt exist!")
+}
+
+const music_file_ogg = Bun.file('./public/muffled.ogg')
+if (await music_file_ogg.exists() === false) {
+  const transcoder = new prism.FFmpeg({
+    args: [
+      "-i", "./public/muffled.mp3",
+      "-f", "ogg",
+      "-c:a", "libopus",
+      "-b:a", "128k",
+      "-ar", "48000",
+      "-ac", "2"
+    ],
+  })
+  await pipeline(
+    createReadStream("./public/muffled.mp3"),
+    transcoder,
+    createWriteStream("./public/muffled.ogg"),
+  )
+}
+
+if (await music_file_ogg.exists() === false) {
+  throw new Error("Failed finding ./public/muffled.ogg!")
+}
+
+const create_resource = () => {
+  return createAudioResource(
+    createReadStream('./public/muffled.ogg')
+    .pipe(new prism.opus.OggDemuxer())
+  )
+}
+
+
+let non_playing_ticks = 0
+
+const play_music = () => {
+  console.log("-- Playing Music")
+  non_playing_ticks = 0
+  const resource = create_resource()
+  player.play(resource)
+}
+player.on('error', (error) => {
+  console.error("Error playing the player!")
+  console.error(error)
+})
+player.on(AudioPlayerStatus.Idle, play_music)
+
+
+
+
+
+
+
+// # Setting up Client
 
 const rest = new REST({ version: "10" }).setToken(token)
 const gateway = new WebSocketManager({
@@ -76,6 +147,9 @@ const client = new Client({ rest, gateway })
 let connection: VoiceConnection | null = null
 
 
+
+
+
 async function set_voice_channel() {
   const toggle = await read_toggle()
   if (!guild_id) throw new Error('no guild id in set_voice_channel')
@@ -91,7 +165,6 @@ async function set_voice_channel() {
       connection = null
     }
   } else {
-
     if (toggle) {
       // The same, check if their id is the same
       const channel_id = await read_channel_id()
@@ -103,24 +176,7 @@ async function set_voice_channel() {
       }
     }
   }
-
-
-
-
-
-  // if (!!toggle === !!current_voice_channel_id) {
-  //   console.log(`toggle ${ toggle } === current_voice_channel_id ${ current_voice_channel_id }`)
-  //   return true
-  // }
-  // if (connection === null && toggle === true) {
-  //   connection = await connect_to_channel_and_subscribe()
-  //   connection.subscribe(player)
-  //   return connection
-  // }
-  // if (connection && toggle === false) {
-  //   connection.disconnect()
-  //   connection = null
-  // }
+  return toggle
 }
 
 
@@ -128,6 +184,7 @@ let client_user_id = ""
 let current_voice_channel_id: string | null = null
 let interval: NodeJS.Timeout
 let ready = false
+
 
 client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
   ready = true
@@ -173,10 +230,38 @@ client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
   // try to join vc every 10 seconds
   clearInterval(interval)
   interval = setInterval(async () => {
-    console.log('---interval')
-    await set_voice_channel()
+    try {
+      console.log('---interval')
+      const toggle = await set_voice_channel()
+      const p = player.state.status
+      const c = connection?.state.status
+      console.log(`---player.state.status: ${ p } - connection.state.status: ${ c }`)
+
+      const healthy = p === AudioPlayerStatus.Playing ||
+        p === AudioPlayerStatus.AutoPaused
+      // AutoPaused counts as healthy.
+      // default no-subscriber is pause so when connection
+      // isn't ready the player goes to autopaused.
+
+      if (toggle && !healthy) {
+        non_playing_ticks += 1
+        console.warn(`not playing for ${ non_playing_ticks } tick(s): ${ p }`)
+        if (non_playing_ticks >= 2) {
+          post_error(`player looks stuck, restarting playback`)
+          play_music()
+        }
+      } else {
+        non_playing_ticks = 0
+      }
+    } catch (error) {
+      console.error("set interval error")
+      console.error(error)
+    }
   }, 10_000)
 
+  // play the music
+
+  play_music()
 })
 
 
@@ -219,11 +304,11 @@ client.on(GatewayDispatchEvents.InteractionCreate, async ({ data: interaction, a
     const channelId = get_string_option(interaction.data, "channel", true)
     console.log(`\n\nset-channel: Invoked with channelId: ${ channelId }`)
 
-
     await set_channel_id(channelId)
+    await reply(`Bot configuration updated: Voice Channel set to: <#${ channelId }>`)
+
     await set_voice_channel()
 
-    await reply(`Bot configuration updated: Voice Channel set to: <#${ channelId }>`)
   } else {
     await reply("Unknown command", true)
   }
@@ -233,27 +318,6 @@ client.on(GatewayDispatchEvents.InteractionCreate, async ({ data: interaction, a
 
 
 // ## The voice part
-
-
-const player = createAudioPlayer()
-const music_file = Bun.file('./public/muffled.mp3')
-if (await music_file.exists() === false) {
-  throw new Error("Music file at (./public/muffled.mp3) doesnt exist!")
-}
-const create_resource = () => createAudioResource("./public/muffled.mp3")
-
-
-client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
-  client_user_id = data.user.id
-
-  const play_music = () => {
-    player.play(create_resource())
-  }
-  player.on(AudioPlayerStatus.Idle, play_music)
-  play_music()
-
-  // await connect_to_channel_and_subscribe()
-})
 
 client.on(
   GatewayDispatchEvents.VoiceStateUpdate,
@@ -284,7 +348,8 @@ function create_djs_adapter(): DiscordGatewayAdapterCreator {
 
 export async function connect_to_channel_and_subscribe() {
   const channel_id = await read_channel_id()
-  if (!channel_id || !guild_id) throw new Error("channel id or guild id not defined!")
+  // if (!channel_id || !guild_id) throw new Error("channel id or guild id not defined!")
+  if (!channel_id || !guild_id) return
 
   if (!connection) {
     connection = joinVoiceChannel({
@@ -293,6 +358,14 @@ export async function connect_to_channel_and_subscribe() {
       adapterCreator: create_djs_adapter(),
       selfDeaf: true,
       selfMute: false,
+    })
+    connection.on(VoiceConnectionStatus.Destroyed, () => {
+      console.log("connection destroyed")
+      connection = null
+    })
+    connection.on(VoiceConnectionStatus.Disconnected, () => {
+      console.log("connection disconnected")
+      connection = null
     })
   } else {
     connection.rejoin({
@@ -308,6 +381,7 @@ export async function connect_to_channel_and_subscribe() {
   } catch (error) {
     console.log("error!", error)
     connection.destroy()
+    connection = null
     throw error
   }
 }
@@ -333,8 +407,9 @@ client.on(
     }
   },
 )
-gateway.on(WebSocketShardEvents.Closed, (_) => {
+gateway.on(WebSocketShardEvents.Closed, () => {
   adapters?.destroy()
+  connection = null
 })
 
 // connect to gateway

@@ -3,8 +3,6 @@ if (!process.env.WEBHOOK_URL) {
   process.exit(0)
 }
 
-const package_json = await import('../package.json')
-
 export async function post_log(msg: string, no_console?: true) {
   try {
     if (!no_console)

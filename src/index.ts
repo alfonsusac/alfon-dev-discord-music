@@ -97,7 +97,7 @@ if (await music_file_ogg.exists() === false) {
       createWriteStream("./public/muffled.ogg"),
     )
   } catch (error) {
-    await post_error(`Error transcoding .mp3 to .ogg!: ${error}`)
+    await post_error(`Error transcoding .mp3 to .ogg!: ${ error }`)
     throw error
   }
 }
@@ -109,7 +109,7 @@ if (await music_file_ogg.exists() === false) {
 const create_resource = () => {
   return createAudioResource(
     createReadStream('./public/muffled.ogg')
-    .pipe(new prism.opus.OggDemuxer())
+      .pipe(new prism.opus.OggDemuxer())
   )
 }
 
@@ -156,10 +156,12 @@ let connection: VoiceConnection | null = null
 
 
 async function set_voice_channel() {
+  console.log("setting voice channel...")
   const toggle = await read_toggle()
   if (!guild_id) throw new Error('no guild id in set_voice_channel')
 
-
+  // This is the most complicated part of the logic.
+  // Might need to refactor this later if necessary.
   if (!!toggle !== !!current_voice_channel_id) {
     console.log("toggle different from activity", toggle, current_voice_channel_id)
     // Toggle mismatch from current state
@@ -170,13 +172,21 @@ async function set_voice_channel() {
       connection = null
     }
   } else {
-    if (toggle) {
+    if (!toggle) {
+      if (connection) {
+        connection.disconnect()
+        connection = null
+      }
+    } else {
       // The same, check if their id is the same
       const channel_id = await read_channel_id()
+      const hasReady = connection && connection.state.status === VoiceConnectionStatus.Ready
       console.log("toggle the same from activity. checking channel sameness")
       console.log(channel_id, current_voice_channel_id)
-      if (channel_id !== current_voice_channel_id) {
-        console.log("stored channel id  different from  current voice channel id")
+      if (!hasReady || channel_id !== current_voice_channel_id) {
+        if (channel_id !== current_voice_channel_id) {
+          console.log("stored channel id  different from  current voice channel id")
+        }
         await connect_to_channel_and_subscribe()
       }
     }
@@ -368,6 +378,7 @@ export async function connect_to_channel_and_subscribe() {
       connection = null
     })
     connection.on(VoiceConnectionStatus.Disconnected, () => {
+
       console.log("connection disconnected")
       connection = null
     })

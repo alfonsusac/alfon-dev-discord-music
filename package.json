@@ -5,7 +5,7 @@
     "start": "bun src/index.ts",
     "pull": "git pull",
     "typecheck": "tsc --noEmit",
-    "start-pm2": "pm2 start ./src/index.ts --name dc-park-speaker --interpreter bun"
+    "start-pm2": "pm2 start \"bun start\" --name dc-park-speaker && pm2 logs dc-park-speaker"
   },
   "name": "alfon-dev-discord-music",
   "module": "index.ts",

@@ -200,11 +200,11 @@ async function set_voice_channel() {
 let client_user_id = ""
 let current_voice_channel_id: string | null = null
 let interval: NodeJS.Timeout
-let ready = false
+let gateway_ready = false
 
 
 client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
-  ready = true
+  gateway_ready = true
   client_user_id = data.user.id
   await post_log(`Logged in as ${ data.user.username }#${ data.user.discriminator }`)
 
@@ -359,8 +359,11 @@ function create_djs_adapter(): DiscordGatewayAdapterCreator {
     adapters = methods
     return {
       sendPayload(data) {
-        if (!ready) return false
-        gateway.send(0, data)
+        if (!gateway_ready) return false
+        Promise.resolve(gateway.send(0, data)).catch((error) => {
+          console.warn("failed sending voice payload to gateway")
+          console.warn(error)
+        })
         return true
       },
       destroy() {
@@ -460,12 +463,22 @@ client.on(
     }
   },
 )
-gateway.on(WebSocketShardEvents.Closed, () => {
-  if (connection && connection.state.status !== VoiceConnectionStatus.Destroyed) {
-    connection.destroy()
-  }
-  connection = null
-  adapters?.destroy()
+gateway.on(WebSocketShardEvents.Ready, () => {
+  gateway_ready = true
+  console.log("gateway ready")
+})
+gateway.on(WebSocketShardEvents.Resumed, () => {
+  gateway_ready = true
+  console.log("gateway resumed")
+})
+gateway.on(WebSocketShardEvents.SocketError, (error) => {
+  gateway_ready = false
+  console.warn("gateway socket error")
+  console.warn(error)
+})
+gateway.on(WebSocketShardEvents.Closed, (code) => {
+  gateway_ready = false
+  console.warn(`gateway closed (code ${ code }) - keeping voice connection alive`)
 })
 
 // connect to gateway

@@ -150,6 +150,8 @@ const gateway = new WebSocketManager({
 })
 const client = new Client({ rest, gateway })
 let connection: VoiceConnection | null = null
+let connecting = false
+let interval_busy = false
 
 
 
@@ -245,6 +247,11 @@ client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
   // try to join vc every 10 seconds
   clearInterval(interval)
   interval = setInterval(async () => {
+    if (interval_busy) {
+      console.warn("previous interval still running, skipping this tick")
+      return
+    }
+    interval_busy = true
     try {
       console.log('---interval')
       const toggle = await set_voice_channel()
@@ -271,6 +278,8 @@ client.once(GatewayDispatchEvents.Ready, async ({ data, api }) => {
     } catch (error) {
       console.error("set interval error")
       console.error(error)
+    } finally {
+      interval_busy = false
     }
   }, 10_000)
 
@@ -362,42 +371,71 @@ function create_djs_adapter(): DiscordGatewayAdapterCreator {
 }
 
 export async function connect_to_channel_and_subscribe() {
-  const channel_id = await read_channel_id()
-  if (!channel_id || !guild_id) return
-
-  if (!connection) {
-    connection = joinVoiceChannel({
-      channelId: channel_id,
-      guildId: guild_id,
-      adapterCreator: create_djs_adapter(),
-      selfDeaf: true,
-      selfMute: false,
-    })
-    connection.on(VoiceConnectionStatus.Destroyed, () => {
-      console.log("connection destroyed")
-      connection = null
-    })
-    connection.on(VoiceConnectionStatus.Disconnected, () => {
-
-      console.log("connection disconnected")
-      connection = null
-    })
-  } else {
-    connection.rejoin({
-      channelId: channel_id,
-      selfDeaf: true,
-      selfMute: false,
-    })
+  if (connecting) {
+    console.warn("connect already in progress, skipping")
+    return
   }
+  connecting = true
+
+  let target: VoiceConnection | null = null
 
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000)
-    connection.subscribe(player)
+    const channel_id = await read_channel_id()
+    if (!channel_id || !guild_id) return
+
+    target = connection
+    if (!target) {
+      const new_conn = joinVoiceChannel({
+        channelId: channel_id,
+        guildId: guild_id,
+        adapterCreator: create_djs_adapter(),
+        selfDeaf: true,
+        selfMute: false,
+      })
+      target = new_conn
+      connection = new_conn
+
+      new_conn.on(VoiceConnectionStatus.Destroyed, () => {
+        console.log("connection destroyed")
+        if (connection === new_conn) connection = null
+      })
+      new_conn.on(VoiceConnectionStatus.Disconnected, async () => {
+        console.log("connection disconnected")
+        try {
+          await Promise.race([
+            entersState(new_conn, VoiceConnectionStatus.Signalling, 5_000),
+            entersState(new_conn, VoiceConnectionStatus.Connecting, 5_000),
+          ])
+          console.log("connection recovering, keeping it")
+        } catch {
+          console.log("connection did not recover, destroying")
+          if (connection === new_conn) connection = null
+          if (new_conn.state.status !== VoiceConnectionStatus.Destroyed) {
+            new_conn.destroy()
+          }
+        }
+      })
+    } else {
+      target.rejoin({
+        channelId: channel_id,
+        selfDeaf: true,
+        selfMute: false,
+      })
+    }
+
+    await entersState(target, VoiceConnectionStatus.Ready, 15_000)
+    target.subscribe(player)
   } catch (error) {
     console.log("error!", error)
-    connection.destroy()
-    connection = null
+    if (target) {
+      if (connection === target) connection = null
+      if (target.state.status !== VoiceConnectionStatus.Destroyed) {
+        target.destroy()
+      }
+    }
     throw error
+  } finally {
+    connecting = false
   }
 }
 
@@ -423,8 +461,11 @@ client.on(
   },
 )
 gateway.on(WebSocketShardEvents.Closed, () => {
-  adapters?.destroy()
+  if (connection && connection.state.status !== VoiceConnectionStatus.Destroyed) {
+    connection.destroy()
+  }
   connection = null
+  adapters?.destroy()
 })
 
 // connect to gateway
